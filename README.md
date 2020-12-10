@@ -1,3 +1,3 @@
 # L-NIC Applications
 
-This repository contains diverse set of applications running on the L-NIC.
+This repository contains diverse collection of applications running on the L-NIC.
