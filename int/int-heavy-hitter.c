@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 
-#include "lnic.h"
+#include "ionic.h"
 
 // Number of reports (per-core / per-context)
 #define NUM_REPORTS 2
@@ -53,22 +53,22 @@ void process_msgs() {
 
   while (1) {
     // wait for a report to arrive
-    lnic_wait();
+    ionic_wait();
     // read application hdr
-    lnic_read();
+    ionic_read();
 
     // word 1 - flow src/dst IP
-    uint64_t ip_info = lnic_read();
+    uint64_t ip_info = ionic_read();
     // word 2 - flow src/dst port and ip_proto
-    uint64_t port_info = lnic_read();
+    uint64_t port_info = ionic_read();
     // NOTE: we will use the flow dst_port as the flow hash for now ...
     uint16_t flow_hash = (port_info & 0xffff00000000) >> 32;
     // word 3 - flow flags
-    uint64_t flow_flags = lnic_read();
+    uint64_t flow_flags = ionic_read();
     bool is_start = (flow_flags & START_FLAG_MASK) > 0;
     bool is_fin = (flow_flags & FIN_FLAG_MASK) > 0;
     // word 4 - report timestamp (ns)
-    uint64_t report_timestamp = lnic_read();
+    uint64_t report_timestamp = ionic_read();
 
 //    printf("ip_info=%lx, port_info=%lx, flow_hash=%d, flow_flags=%lx, is_start=%d, is_fin=%d report_timestamp=%lx\n", ip_info, port_info, flow_hash, flow_flags, is_start, is_fin, report_timestamp);
 
@@ -87,13 +87,13 @@ void process_msgs() {
     flowState[flow_hash].ip_info = ip_info;
     flowState[flow_hash].port_info = port_info;
     // word 5 - pkt length
-    flowState[flow_hash].byte_count += lnic_read();
+    flowState[flow_hash].byte_count += ionic_read();
 
     // word 6
-    uint64_t ingress_switch_ip = lnic_read();
+    uint64_t ingress_switch_ip = ionic_read();
 
     // word 7
-    uint64_t nic_timestamp = lnic_read();
+    uint64_t nic_timestamp = ionic_read();
 
     // compute flow rate (Gbps)
     uint64_t flow_rate = (is_start) ? 0 : flowState[flow_hash].byte_count * 8 / (report_timestamp - flowState[flow_hash].start_time);
@@ -103,11 +103,11 @@ void process_msgs() {
       tx_app_hdr = (ingress_switch_ip << 32)
                    | (LATENCY_PORT << 16)
                    | HH_EVENT_MSG_LEN;
-      lnic_write_r(tx_app_hdr);
-      lnic_write_i(HH_EVENT_TYPE);
-      lnic_write_r(flowState[flow_hash].ip_info);
-      lnic_write_r(flowState[flow_hash].port_info);
-      lnic_write_r(nic_timestamp);
+      ionic_write_r(tx_app_hdr);
+      ionic_write_i(HH_EVENT_TYPE);
+      ionic_write_r(flowState[flow_hash].ip_info);
+      ionic_write_r(flowState[flow_hash].port_info);
+      ionic_write_r(nic_timestamp);
     }
 
     // free flow state when flow completes
@@ -130,14 +130,14 @@ void process_msgs() {
       tx_app_hdr = (upstream_ip << 32)
                    | (LATENCY_PORT << 16)
                    | 16;
-      lnic_write_r(tx_app_hdr);
-      lnic_write_i(DONE_TYPE);
-      lnic_write_r(start_time);
+      ionic_write_r(tx_app_hdr);
+      ionic_write_i(DONE_TYPE);
+      ionic_write_r(start_time);
       // reset state
       total_report_count = 0;
     }
 
-    lnic_msg_done();
+    ionic_msg_done();
   }
 }
 
@@ -148,7 +148,7 @@ int core_main(int argc, char** argv, int cid, int nc) {
   uint64_t context_id = cid;
   uint64_t priority = 0;
 
-  lnic_add_context(context_id, priority);
+  ionic_add_context(context_id, priority);
 
   process_msgs();
 

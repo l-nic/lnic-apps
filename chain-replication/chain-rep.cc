@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "lnic.h"
+#include "ionic.h"
 
 #define USE_MICA 1
 
@@ -133,40 +133,40 @@ int do_read(int cid) {
   uint8_t node_cnt = 0;
   uint16_t msg_len = 8 + (node_cnt * 8) + (8 * KEY_SIZE_WORDS) + (8 * 0);
   app_hdr = ((uint64_t)(CLIENT_IP+3) << 32) | (SERVER_CONTEXT << 16) | msg_len;
-  lnic_write_r(app_hdr);
+  ionic_write_r(app_hdr);
   uint8_t client_ctx = cid;
   uint32_t client_ip = CLIENT_IP;
 
   uint8_t flags = CHAINREP_FLAGS_OP_READ;
   uint8_t seq = 0;
   uint64_t cr_meta_fields = ((uint64_t)flags << 56) | ((uint64_t)seq << 48) | ((uint64_t)node_cnt << 40) | ((uint64_t)client_ctx << 32) | client_ip;
-  lnic_write_r(cr_meta_fields);
-  lnic_write_r(msg_key[0]);
-  lnic_write_r(msg_key[1]);
+  ionic_write_r(cr_meta_fields);
+  ionic_write_r(msg_key[0]);
+  ionic_write_r(msg_key[1]);
 
   start_time = rdcycle();
-  lnic_wait();
+  ionic_wait();
   stop_time = rdcycle();
 
-  app_hdr = lnic_read();
+  app_hdr = ionic_read();
   uint32_t src_ip = (app_hdr & IP_MASK) >> 32;
   uint16_t src_context = (app_hdr & CONTEXT_MASK) >> 16;
   uint16_t rx_msg_len = app_hdr & LEN_MASK;
   if (rx_msg_len != 8 + (0 * 8) + (8 * KEY_SIZE_WORDS) + (8 * VALUE_SIZE_WORDS)) printf("Error: got msg_len=%d (expected %d)\n", rx_msg_len, 8 + (0 * 8) + (8 * KEY_SIZE_WORDS) + (8 * VALUE_SIZE_WORDS));
   //printf("[%d] --> Received from 0x%x:%d msg of length: %u bytes\n", cid, src_ip, src_context, rx_msg_len);
 
-  cr_meta_fields = lnic_read();
+  cr_meta_fields = ionic_read();
   flags = (uint8_t) (cr_meta_fields >> 56);
   seq = (uint8_t) (cr_meta_fields >> 48);
   node_cnt = (uint8_t) (cr_meta_fields >> 40);
   client_ctx = (uint8_t) (cr_meta_fields >> 32);
   client_ip = (uint32_t) cr_meta_fields;
   for (unsigned i = 0; i < node_cnt; i++)
-    lnic_read();
-  msg_key[0] = lnic_read();
-  msg_key[1] = lnic_read();
+    ionic_read();
+  msg_key[0] = ionic_read();
+  msg_key[1] = ionic_read();
   for (int i = 0; i < VALUE_SIZE_WORDS; i++)
-    msg_val[i] = lnic_read();
+    msg_val[i] = ionic_read();
   printf("[%d] READ flags=0x%x seq=%d node_cnt=%d client_ctx=%d client_ip=%x key=0x%lx val=0x%lx. Latency: %ld\n", cid, flags, seq, node_cnt, client_ctx, client_ip, msg_key[0], msg_val[0], stop_time-start_time);
   if (flags != 0x40) printf("Error: got flags=0x%x (expected 0x%x)\n", flags, 0x40);
   if (seq != 0) printf("Error: got seq=%d (expected %d)\n", seq, 0);
@@ -177,7 +177,7 @@ int do_read(int cid) {
   if (src_context != SERVER_CONTEXT) printf("Error: got src_context=%d (expected %d)\n", src_context, SERVER_CONTEXT);
   if (msg_key[0] != 0x3) printf("Error: got msg_key[0]=%ld (expected %d)\n", msg_key[0], 0x3);
   if (msg_val[0] != 0x7) printf("Error: got msg_val[0]=%ld (expected %d)\n", msg_val[0], 0x7);
-  lnic_msg_done();
+  ionic_msg_done();
 
   return EXIT_SUCCESS;
 }
@@ -197,44 +197,44 @@ int do_write(int cid) {
   uint8_t node_cnt = CHAIN_SIZE - 1;
   uint16_t msg_len = 8 + (node_cnt * 8) + (8 * KEY_SIZE_WORDS) + (8 * VALUE_SIZE_WORDS);
   app_hdr = ((uint64_t)node_ips[0] << 32) | (node_ctxs[0] << 16) | msg_len;
-  lnic_write_r(app_hdr);
+  ionic_write_r(app_hdr);
   uint8_t client_ctx = cid;
   uint32_t client_ip = CLIENT_IP;
 
   uint8_t flags = CHAINREP_FLAGS_OP_WRITE;
   uint8_t seq = 0;
   uint64_t cr_meta_fields = ((uint64_t)flags << 56) | ((uint64_t)seq << 48) | ((uint64_t)node_cnt << 40) | ((uint64_t)client_ctx << 32) | client_ip;
-  lnic_write_r(cr_meta_fields);
+  ionic_write_r(cr_meta_fields);
 
   for (unsigned i = 1; i < CHAIN_SIZE; i++)
-    lnic_write_r(((uint64_t)node_ctxs[i] << 32) | node_ips[i]);
+    ionic_write_r(((uint64_t)node_ctxs[i] << 32) | node_ips[i]);
 
-  lnic_write_r(msg_key[0]);
-  lnic_write_r(msg_key[1]);
+  ionic_write_r(msg_key[0]);
+  ionic_write_r(msg_key[1]);
   for (int i = 0; i < VALUE_SIZE_WORDS; i++)
-    lnic_write_r(msg_val[i]);
+    ionic_write_r(msg_val[i]);
 
   start_time = rdcycle();
-  lnic_wait();
+  ionic_wait();
   stop_time = rdcycle();
 
-  app_hdr = lnic_read();
+  app_hdr = ionic_read();
   uint32_t src_ip = (app_hdr & IP_MASK) >> 32;
   uint16_t src_context = (app_hdr & CONTEXT_MASK) >> 16;
   uint16_t rx_msg_len = app_hdr & LEN_MASK;
   if (rx_msg_len != 8 + (0 * 8) + (8 * KEY_SIZE_WORDS) + (8 * 0)) printf("Error: got msg_len=%d (expected %d)\n", rx_msg_len, 8 + (0 * 8) + (8 * KEY_SIZE_WORDS) + (8 * 0));
   //printf("[%d] --> Received from 0x%x:%d msg of length: %u bytes\n", cid, src_ip, src_context, rx_msg_len);
 
-  cr_meta_fields = lnic_read();
+  cr_meta_fields = ionic_read();
   flags = (uint8_t) (cr_meta_fields >> 56);
   seq = (uint8_t) (cr_meta_fields >> 48);
   node_cnt = (uint8_t) (cr_meta_fields >> 40);
   client_ctx = (uint8_t) (cr_meta_fields >> 32);
   client_ip = (uint32_t) cr_meta_fields;
   for (unsigned i = 0; i < node_cnt; i++)
-    lnic_read();
-  msg_key[0] = lnic_read();
-  msg_key[1] = lnic_read();
+    ionic_read();
+  msg_key[0] = ionic_read();
+  msg_key[1] = ionic_read();
   printf("[%d] WRITE flags=0x%x seq=%d node_cnt=%d client_ctx=%d client_ip=%x key=0x%lx val=0x%lx. Latency: %ld\n", cid, flags, seq, node_cnt, client_ctx, client_ip, msg_key[0], msg_val[0], stop_time-start_time);
   if (flags != 0x20) printf("Error: got flags=0x%x (expected 0x%x)\n", flags, 0x20);
   if (seq != 0) printf("Error: got seq=%d (expected %d)\n", seq, 0);
@@ -244,7 +244,7 @@ int do_write(int cid) {
   if (src_ip != node_ips[CHAIN_SIZE-1]) printf("Error: got src_ip=%d (expected %d)\n", src_ip, node_ips[CHAIN_SIZE-1]);
   if (src_context != node_ctxs[CHAIN_SIZE-1]) printf("Error: got src_context=%d (expected %d)\n", src_context, node_ctxs[CHAIN_SIZE-1]);
   if (msg_key[0] != 0x3) printf("Error: got msg_key[0]=%ld (expected %d)\n", msg_key[0], 0x3);
-  lnic_msg_done();
+  ionic_msg_done();
 
   return EXIT_SUCCESS;
 }
@@ -278,9 +278,9 @@ int run_client(int cid) {
 void send_startup_msg(int cid, uint64_t context_id) {
   uint64_t app_hdr = (load_gen_ip << 32) | (0 << 16) | (2*8);
   uint64_t cid_to_send = cid;
-  lnic_write_r(app_hdr);
-  lnic_write_r(cid_to_send);
-  lnic_write_r(context_id);
+  ionic_write_r(app_hdr);
+  ionic_write_r(cid_to_send);
+  ionic_write_r(context_id);
 }
 
 int run_proxy_client(int cid, uint64_t context_id) {
@@ -296,16 +296,16 @@ int run_proxy_client(int cid, uint64_t context_id) {
   printf("[%d] Proxy client ready.\n", cid);
 
   while (1) {
-    lnic_wait();
+    ionic_wait();
     recv_time = rdcycle();
-    app_hdr = lnic_read();
+    app_hdr = ionic_read();
     msg_len = (uint16_t)app_hdr;
     src_ip = (app_hdr & IP_MASK) >> 32;
     //printf("[%d] --> Received msg of length: %u bytes\n", cid, (uint16_t)app_hdr);
-    service_time = lnic_read();
-    sent_time = lnic_read();
+    service_time = ionic_read();
+    sent_time = ionic_read();
     for (int i = 0; i < (msg_len/8)-2; i++)
-      payload[i] = lnic_read(); // read the entire payload
+      payload[i] = ionic_read(); // read the entire payload
 
     if (src_ip == load_gen_ip) { // From the load generator
       // Forward the packet to the first node in the chain
@@ -318,12 +318,12 @@ int run_proxy_client(int cid, uint64_t context_id) {
       service_time = recv_time - service_time; // end-to-end latency
     }
 
-    lnic_write_r(app_hdr);
-    lnic_write_r(service_time);
-    lnic_write_r(sent_time);
+    ionic_write_r(app_hdr);
+    ionic_write_r(service_time);
+    ionic_write_r(sent_time);
     for (int i = 0; i < (msg_len/8)-2; i++)
-      lnic_write_r(payload[i]); // forward the payload
-    lnic_msg_done();
+      ionic_write_r(payload[i]); // forward the payload
+    ionic_msg_done();
   }
 }
 
@@ -374,24 +374,24 @@ int run_server(int cid, uint64_t context_id) {
   send_startup_msg(cid, context_id);
 
   while (1) {
-    lnic_wait();
-    app_hdr = lnic_read();
+    ionic_wait();
+    app_hdr = ionic_read();
     //printf("[%d] --> Received msg of length: %u bytes\n", cid, (uint16_t)app_hdr);
-    service_time = lnic_read();
-    sent_time = lnic_read();
+    service_time = ionic_read();
+    sent_time = ionic_read();
 
-    cr_meta_fields = lnic_read();
+    cr_meta_fields = ionic_read();
     flags = (uint8_t) (cr_meta_fields >> 56);
     seq = (uint8_t) (cr_meta_fields >> 48);
     node_cnt = (uint8_t) (cr_meta_fields >> 40);
     client_ctx = (uint8_t) (cr_meta_fields >> 32);
     client_ip = (uint32_t) cr_meta_fields;
     for (unsigned i = 0; i < node_cnt; i++) {
-      nodes[i] = lnic_read();
+      nodes[i] = ionic_read();
     }
-    msg_key[0] = lnic_read();
-    msg_key[1] = lnic_read();
-    key_hash = lnic_read();
+    msg_key[0] = ionic_read();
+    msg_key[1] = ionic_read();
+    key_hash = ionic_read();
 
     unsigned new_node_head = 0;
     bool send_value;
@@ -434,14 +434,14 @@ int run_server(int cid, uint64_t context_id) {
         node_cnt -= 1;
         send_value = true; // forward the written value down the chain
       }
-      msg_val[0] = lnic_read();
-      msg_val[1] = lnic_read();
-      msg_val[2] = lnic_read();
-      msg_val[3] = lnic_read();
-      msg_val[4] = lnic_read();
-      msg_val[5] = lnic_read();
-      msg_val[6] = lnic_read();
-      msg_val[7] = lnic_read();
+      msg_val[0] = ionic_read();
+      msg_val[1] = ionic_read();
+      msg_val[2] = ionic_read();
+      msg_val[3] = ionic_read();
+      msg_val[4] = ionic_read();
+      msg_val[5] = ionic_read();
+      msg_val[6] = ionic_read();
+      msg_val[7] = ionic_read();
 #if USE_MICA
       out_result = table.set(key_hash, ft_key, reinterpret_cast<char *>(&msg_val[0]));
       if (out_result != MicaResult::kSuccess) {
@@ -454,32 +454,32 @@ int run_server(int cid, uint64_t context_id) {
 
     uint16_t msg_len = 8 + 8 + 8 + (node_cnt * 8) + (KEY_SIZE_WORDS * 8) + 8 + (send_value ? (8 * VALUE_SIZE_WORDS) : 0);
     app_hdr = ((uint64_t)dst_ip << 32) | ((uint64_t)dst_context << 16) | (uint64_t)msg_len;
-    lnic_write_r(app_hdr);
-    lnic_write_r(service_time);
-    lnic_write_r(sent_time);
+    ionic_write_r(app_hdr);
+    ionic_write_r(service_time);
+    ionic_write_r(sent_time);
 
     flags &= ~CHAINREP_FLAGS_FROM_TESTER;
     cr_meta_fields = ((uint64_t)flags << 56) | ((uint64_t)seq << 48) | ((uint64_t)node_cnt << 40) | ((uint64_t)client_ctx << 32) | client_ip;
-    lnic_write_r(cr_meta_fields);
+    ionic_write_r(cr_meta_fields);
 
     for (unsigned i = new_node_head; i < new_node_head+node_cnt; i++)
-      lnic_write_r(nodes[i]);
+      ionic_write_r(nodes[i]);
 
-    lnic_write_r(msg_key[0]);
-    lnic_write_r(msg_key[1]);
-    lnic_write_r(key_hash);
+    ionic_write_r(msg_key[0]);
+    ionic_write_r(msg_key[1]);
+    ionic_write_r(key_hash);
     if (send_value) {
-      lnic_write_r(msg_val[0]);
-      lnic_write_r(msg_val[1]);
-      lnic_write_r(msg_val[2]);
-      lnic_write_r(msg_val[3]);
-      lnic_write_r(msg_val[4]);
-      lnic_write_r(msg_val[5]);
-      lnic_write_r(msg_val[6]);
-      lnic_write_r(msg_val[7]);
+      ionic_write_r(msg_val[0]);
+      ionic_write_r(msg_val[1]);
+      ionic_write_r(msg_val[2]);
+      ionic_write_r(msg_val[3]);
+      ionic_write_r(msg_val[4]);
+      ionic_write_r(msg_val[5]);
+      ionic_write_r(msg_val[6]);
+      ionic_write_r(msg_val[7]);
     }
 
-    lnic_msg_done();
+    ionic_msg_done();
     //printf("[%d] %s seq=%d, node_cnt=%d, key=0x%lx, val=0x%lx\n", cid,
     //    flags & CHAINREP_FLAGS_OP_WRITE ? "WRITE" : "READ", seq, node_cnt, msg_key[0], msg_val[0]);
 	}
@@ -506,7 +506,7 @@ int core_main(int argc, char** argv, int cid, int nc) {
   printf("\n");
 
   if (argc < 3) {
-      printf("This program requires passing the L-NIC MAC address, followed by the L-NIC IP address.\n");
+      printf("This program requires passing the NIC MAC address, followed by the NIC IP address.\n");
       return -1;
   }
 
@@ -523,7 +523,7 @@ int core_main(int argc, char** argv, int cid, int nc) {
 
   uint64_t context_id = 0;
   uint64_t priority = 0;
-  lnic_add_context(context_id, priority);
+  ionic_add_context(context_id, priority);
 
   // wait for all cores to boot -- TODO: is there a better way than this?
   for (int i = 0; i < 1000; i++) {

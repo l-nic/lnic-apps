@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 #include "mica/util/hash.h"
-#include "lnic.h"
+#include "ionic.h"
 
 #define NUM_REPORTS 2
 
@@ -140,12 +140,12 @@ void process_hop_meta(int i, flow_key_t flow_key, uint8_t flow_hash, bool is_new
   uint64_t upstream_collector_ip = UPSTREAM_COLLECTOR_IP;
 
   // ---- swID ----
-  swID = lnic_read();
+  swID = ionic_read();
   // detect path change & update flow path
   *path_change |= (flowState[flow_hash].path[i] != swID);
   flowState[flow_hash].path[i] = swID;
   // ---- L1 Ports ----
-  msg_word = lnic_read();
+  msg_word = ionic_read();
   l1_ingress_port = (msg_word & 0xffff0000) >> 16;
   l1_egress_port = msg_word & 0xffff;
   // Compute link_hash
@@ -153,7 +153,7 @@ void process_hop_meta(int i, flow_key_t flow_key, uint8_t flow_hash, bool is_new
   link_key.portID = l1_egress_port;
   link_hash = swID; // mica_hash(&link_key, sizeof(link_key));
   // ---- Hop Latency ----
-  hop_latency = lnic_read();
+  hop_latency = ionic_read();
   *path_latency += hop_latency;
   // Detect hop latency change & update state
   bool hop_latency_change = (flowState[flow_hash].hop_latency[i] != hop_latency);
@@ -163,19 +163,19 @@ void process_hop_meta(int i, flow_key_t flow_key, uint8_t flow_hash, bool is_new
     tx_app_hdr = (upstream_collector_ip << 32)
                  | (UPSTREAM_COLLECTOR_PORT << 16)
                  | HOP_LATENCY_EVENT_LEN;
-    lnic_write_r(tx_app_hdr);
-    lnic_write_i(HOP_LATENCY_EVENT_TYPE);
-    lnic_write_r(report_timestamp);
+    ionic_write_r(tx_app_hdr);
+    ionic_write_i(HOP_LATENCY_EVENT_TYPE);
+    ionic_write_r(report_timestamp);
     tx_msg_word = flow_key.src_ip;
-    lnic_write_r( (tx_msg_word << 32) | flow_key.dst_ip);
+    ionic_write_r( (tx_msg_word << 32) | flow_key.dst_ip);
     tx_msg_word = flow_key.src_port;
     tx_msg_word = (tx_msg_word << 16) | flow_key.dst_port;
     tx_msg_word = (tx_msg_word << 32) | swID;
-    lnic_write_r(tx_msg_word);
-    lnic_write_r(hop_latency);
+    ionic_write_r(tx_msg_word);
+    ionic_write_r(hop_latency);
   }
   // ---- Q Info ----
-  msg_word = lnic_read();
+  msg_word = ionic_read();
   qID = (msg_word & 0xff000000) >> 24;
   q_size = msg_word & 0xffffff;
   // Compute q_hash - NOTE: currently just switch ID, should eventually be hash of switch ID ++ qID
@@ -196,23 +196,23 @@ void process_hop_meta(int i, flow_key_t flow_key, uint8_t flow_hash, bool is_new
     tx_app_hdr = (upstream_collector_ip << 32)
                  | (UPSTREAM_COLLECTOR_PORT << 16)
                  | QSIZE_EVENT_LEN;
-    lnic_write_r(tx_app_hdr);
-    lnic_write_i(QSIZE_EVENT_TYPE);
-    lnic_write_r(report_timestamp);
+    ionic_write_r(tx_app_hdr);
+    ionic_write_i(QSIZE_EVENT_TYPE);
+    ionic_write_r(report_timestamp);
     tx_msg_word = swID;
-    lnic_write_r((tx_msg_word << 32) | qID);
-    lnic_write_r(q_size);
+    ionic_write_r((tx_msg_word << 32) | qID);
+    ionic_write_r(q_size);
   }
   // ---- Ingress Timestamp ----
-  ingress_timestamp = lnic_read();
+  ingress_timestamp = ionic_read();
   // ---- Egress Timestamp ----
-  egress_timestamp = lnic_read();
+  egress_timestamp = ionic_read();
   // ---- L2 Ports ----
-  msg_word = lnic_read();
+  msg_word = ionic_read();
   l2_ingress_port = (msg_word & 0xffff0000) >> 16;
   l2_egress_port = msg_word & 0xffff;
   // ---- TX Utilization ----
-  tx_utilization = lnic_read();
+  tx_utilization = ionic_read();
   // Update linkState / Fire LinkUtilEvent
   if (linkState[link_hash].valid && (linkState[link_hash].link_key != link_key)) {
     printf("ERROR: hash collision on linkState. Existing swID/portID = %d/%d, New swID/portID = %d/%d\n", linkState[link_hash].link_key.swID, linkState[link_hash].link_key.portID, swID, l1_egress_port);
@@ -227,12 +227,12 @@ void process_hop_meta(int i, flow_key_t flow_key, uint8_t flow_hash, bool is_new
     tx_app_hdr = (upstream_collector_ip << 32)
                  | (UPSTREAM_COLLECTOR_PORT << 16)
                  | LINK_UTIL_EVENT_LEN;
-    lnic_write_r(tx_app_hdr);
-    lnic_write_i(LINK_UTIL_EVENT_TYPE);
-    lnic_write_r(report_timestamp);
+    ionic_write_r(tx_app_hdr);
+    ionic_write_i(LINK_UTIL_EVENT_TYPE);
+    ionic_write_r(report_timestamp);
     tx_msg_word = swID;
-    lnic_write_r((tx_msg_word << 32) | l1_egress_port);
-    lnic_write_r(tx_utilization);
+    ionic_write_r((tx_msg_word << 32) | l1_egress_port);
+    ionic_write_r(tx_utilization);
   }
 }
 
@@ -283,33 +283,33 @@ void process_msgs() {
 
   while (1) {
     // wait for a report to arrive
-    lnic_wait();
+    ionic_wait();
 
     PROFILE_POINT
 
     // process app header
-    lnic_read();
+    ionic_read();
     // process INT report
     // word 1
-    msg_word = lnic_read();
+    msg_word = ionic_read();
     // word 2 - report_timestamp[31:16]
-    report_timestamp = (lnic_read() & 0xffff) << 16;
+    report_timestamp = (ionic_read() & 0xffff) << 16;
     // word 3 - report_timestamp[15:0]
-    report_timestamp |= (lnic_read() & 0xffff000000000000) >> 48;
+    report_timestamp |= (ionic_read() & 0xffff000000000000) >> 48;
     // words 4 & 5
-    lnic_read();
-    lnic_read();
+    ionic_read();
+    ionic_read();
     // word 6 - src_ip
-    src_ip = (uint32_t)lnic_read();
+    src_ip = (uint32_t)ionic_read();
     // word 7 - dst_ip, src_port, dst_port
-    msg_word = lnic_read();
+    msg_word = ionic_read();
     dst_ip = msg_word >> 32;
     src_port = (msg_word & 0xffff0000) >> 16;
     dst_port = msg_word & 0xffff;
     // word 8 - INT header length
-    int_hdr_len = (lnic_read() & 0xff00) >> 8;
+    int_hdr_len = (ionic_read() & 0xff00) >> 8;
     // word 9 - hopMLen, INT instruction
-    msg_word = lnic_read();
+    msg_word = ionic_read();
     hopMLen = (msg_word & 0xff0000000000) >> 40;
     int_ins = (msg_word & 0xff000000) >> 24;
 
@@ -359,17 +359,17 @@ void process_msgs() {
       tx_app_hdr = (upstream_collector_ip << 32)
                    | (UPSTREAM_COLLECTOR_PORT << 16)
                    | (BASE_PATH_EVENT_LEN + num_hops*8);
-      lnic_write_r(tx_app_hdr);
-      lnic_write_i(PATH_EVENT_TYPE);
-      lnic_write_r(report_timestamp);
+      ionic_write_r(tx_app_hdr);
+      ionic_write_i(PATH_EVENT_TYPE);
+      ionic_write_r(report_timestamp);
       tx_msg_word = src_ip;
-      lnic_write_r( (tx_msg_word << 32) | dst_ip);
+      ionic_write_r( (tx_msg_word << 32) | dst_ip);
       tx_msg_word = src_port;
       tx_msg_word = (tx_msg_word << 16) | dst_port;
       tx_msg_word = (tx_msg_word << 32) | num_hops;
-      lnic_write_r(tx_msg_word);
+      ionic_write_r(tx_msg_word);
       for (i = 0; i < num_hops; i++) {
-        lnic_write_r(flowState[flow_hash].path[i]);
+        ionic_write_r(flowState[flow_hash].path[i]);
       }
     }
 
@@ -380,21 +380,21 @@ void process_msgs() {
       tx_app_hdr = (upstream_collector_ip << 32)
                    | (UPSTREAM_COLLECTOR_PORT << 16)
                    | PATH_LATENCY_EVENT_LEN;
-      lnic_write_r(tx_app_hdr);
-      lnic_write_i(PATH_LATENCY_EVENT_TYPE);
-      lnic_write_r(report_timestamp);
+      ionic_write_r(tx_app_hdr);
+      ionic_write_i(PATH_LATENCY_EVENT_TYPE);
+      ionic_write_r(report_timestamp);
       tx_msg_word = src_ip;
-      lnic_write_r( (tx_msg_word << 32) | dst_ip);
+      ionic_write_r( (tx_msg_word << 32) | dst_ip);
       tx_msg_word = src_port;
       tx_msg_word = (tx_msg_word << 16) | dst_port;
       tx_msg_word = tx_msg_word << 32;
-      lnic_write_r(tx_msg_word);
-      lnic_write_r(path_latency);
+      ionic_write_r(tx_msg_word);
+      ionic_write_r(path_latency);
     }
 
     // NOTE: this assumes that the metadata words are 64-bit aligned.
     // read NIC timestamp
-    nic_ts = lnic_read();
+    nic_ts = ionic_read();
 //    printf("nic_ts = %ld\n", nic_ts);
 
     // read NIC timestamp
@@ -419,13 +419,13 @@ void process_msgs() {
       tx_app_hdr = (upstream_collector_ip << 32)
                    | (LATENCY_PORT << 16)
                    | 8;
-      lnic_write_r(tx_app_hdr);
-      lnic_write_r(start_time);
+      ionic_write_r(tx_app_hdr);
+      ionic_write_r(start_time);
       // reset state
       total_report_count = 0;
     }
 
-    lnic_msg_done();
+    ionic_msg_done();
   }
 }
 
@@ -435,7 +435,7 @@ extern "C" {
 int main(int argc, char** argv) {
   uint64_t context_id = 0;
   uint64_t priority = 0;
-  lnic_add_context(context_id, priority);
+  ionic_add_context(context_id, priority);
 
   process_msgs();
 

@@ -2,11 +2,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "lnic.h"
+#include "ionic.h"
 #include "othello.h"
 
 /**
- * Othello nanoservice implementation on RISC-V using LNIC GPR implementation.
+ * Othello nanoservice implementation on RISC-V using IONIC GPR implementation.
  */
 
 /**
@@ -53,8 +53,8 @@
  */
 
 int main(void) {
-  // register context ID with L-NIC
-  lnic_add_context(0, 0);
+  // register context ID with IONIC
+  ionic_add_context(0, 0);
 
   // local variables
   uint64_t app_hdr;
@@ -72,71 +72,71 @@ int main(void) {
   uint64_t map_cnt, response_cnt, msg_minimax_val;
   // process pkts 
 othello_start:
-  lnic_wait();
+  ionic_wait();
   // read app hdr
-  app_hdr = lnic_read();
+  app_hdr = ionic_read();
   // read Othello hdr and branch based on msg_type
-  lnic_branch("bne", map_type, process_reduce);
+  ionic_branch("bne", map_type, process_reduce);
   // process map msg
-  board = lnic_read();
+  board = ionic_read();
   compute_boards(board, new_boards, &num_boards);
-  max_depth = lnic_read();
-  cur_depth = lnic_read();
+  max_depth = ionic_read();
+  cur_depth = ionic_read();
   //printf("Processing Map message.\n\tboard = %lu\n\tmax_depth = %lu\n\tcur_depth = %lu\n", board, max_depth, cur_depth);
   if (cur_depth < max_depth) {
     // send out new boards in map msgs
     // record msg state (on stack because don't want to implement malloc)
-    msg_state.src_host_id = lnic_read();
-    msg_state.src_msg_ptr = lnic_read();
-    map_start_time = lnic_read();
+    msg_state.src_host_id = ionic_read();
+    msg_state.src_msg_ptr = ionic_read();
+    map_start_time = ionic_read();
     msg_state.map_cnt = num_boards;
     msg_state.response_cnt = 0;
     msg_state.minimax_val = MAX_INT;
     // send map msgs
     for (i = 0; i < num_boards; i++) {
       // write msg len
-      lnic_write_r((app_hdr & (IP_MASK | CONTEXT_MASK)) | MAP_MSG_LEN);
+      ionic_write_r((app_hdr & (IP_MASK | CONTEXT_MASK)) | MAP_MSG_LEN);
       // write msg type
-      lnic_write_i(MAP_TYPE);
+      ionic_write_i(MAP_TYPE);
       // write new_board, max_depth, cur_depth, src_host_id, src_msg_ptr, timestamp
-      lnic_write_r(new_boards[i]); // TODO(): need a lnic_write_m() for memory writes?
-      lnic_write_r(max_depth);
-      lnic_write_r(cur_depth + 1);
-      lnic_write_i(HOST_ID);
-      lnic_write_r(&msg_state);
-      lnic_write_r(map_start_time);
+      ionic_write_r(new_boards[i]); // TODO(): need a ionic_write_m() for memory writes?
+      ionic_write_r(max_depth);
+      ionic_write_r(cur_depth + 1);
+      ionic_write_i(HOST_ID);
+      ionic_write_r(&msg_state);
+      ionic_write_r(map_start_time);
     }
   } else {
     // evaluate_boards to compute the min (or max)
     evaluate_boards(new_boards, num_boards, &minimax_val);
     // construct reduce msg and send into network
     // write msg length
-    lnic_write_r((app_hdr & (IP_MASK | CONTEXT_MASK)) | REDUCE_MSG_LEN);
+    ionic_write_r((app_hdr & (IP_MASK | CONTEXT_MASK)) | REDUCE_MSG_LEN);
     // write msg type
-    lnic_write_i(REDUCE_TYPE);
+    ionic_write_i(REDUCE_TYPE);
     // write target_host_id, target_msg_ptr, minimax_val, timestamp
-    lnic_copy();
-    lnic_copy();
-    lnic_write_r(minimax_val);
-    lnic_copy();
+    ionic_copy();
+    ionic_copy();
+    ionic_write_r(minimax_val);
+    ionic_copy();
   }
   goto othello_start;
 process_reduce:
   // discard target_host_id
-  lnic_read();
+  ionic_read();
   // get msg state ptr
-  state_ptr = (struct state *)lnic_read();
+  state_ptr = (struct state *)ionic_read();
   // lookup map_cnt, response_cnt, minimax_val
   map_cnt = (*state_ptr).map_cnt;
   (*state_ptr).response_cnt += 1; // increment response_cnt
   response_cnt = (*state_ptr).response_cnt;
   minimax_val = (*state_ptr).minimax_val;
-  msg_minimax_val = lnic_read();
+  msg_minimax_val = ionic_read();
   // record timestamp of first reduce msg
   if (response_cnt == 1) {
-    reduce_start_time = lnic_read();
+    reduce_start_time = ionic_read();
   } else {
-    lnic_read();
+    ionic_read();
   }
   // compute running min val
   if (msg_minimax_val < minimax_val) {
@@ -146,14 +146,14 @@ process_reduce:
   if (response_cnt == map_cnt) {
     // send reduce_msg to parent
     // write msg length
-    lnic_write_r((app_hdr & (IP_MASK | CONTEXT_MASK)) | REDUCE_MSG_LEN);
+    ionic_write_r((app_hdr & (IP_MASK | CONTEXT_MASK)) | REDUCE_MSG_LEN);
     // write msg type
-    lnic_write_i(REDUCE_TYPE);
+    ionic_write_i(REDUCE_TYPE);
     // write target_host_id, target_msg_ptr, minimax_val
-    lnic_write_m((*state_ptr).src_host_id);
-    lnic_write_m((*state_ptr).src_msg_ptr);
-    lnic_write_m((*state_ptr).minimax_val);
-    lnic_write_r(reduce_start_time);
+    ionic_write_m((*state_ptr).src_host_id);
+    ionic_write_m((*state_ptr).src_msg_ptr);
+    ionic_write_m((*state_ptr).minimax_val);
+    ionic_write_r(reduce_start_time);
   }
   goto othello_start;
   return 0;

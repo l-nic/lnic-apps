@@ -20,7 +20,7 @@
 char nuevomatch_64_classifier[] = {0};
 #endif
 
-#include "lnic.h"
+#include "ionic.h"
 
 // Expected address of the load generator
 uint64_t load_gen_ip = 0x0a000001;
@@ -36,9 +36,9 @@ extern "C" {
 void send_startup_msg(int cid, uint64_t context_id) {
   uint64_t app_hdr = (load_gen_ip << 32) | (0 << 16) | (2*8);
   uint64_t cid_to_send = cid;
-  lnic_write_r(app_hdr);
-  lnic_write_r(cid_to_send);
-  lnic_write_r(context_id);
+  ionic_write_r(app_hdr);
+  ionic_write_r(cid_to_send);
+  ionic_write_r(context_id);
 }
 
 
@@ -86,20 +86,20 @@ int nuevomatch_server(int cid, int context_id) {
 #define HEADER_WORDS 3
   uint64_t headers[HEADER_WORDS];
   while (1) {
-    lnic_wait();
-    app_hdr = lnic_read();
+    ionic_wait();
+    app_hdr = ionic_read();
     //printf("[%d] --> Received msg of length: %u bytes\n", cid, (uint16_t)app_hdr);
-    service_time = lnic_read();
-    sent_time = lnic_read();
-    class_meta = lnic_read();
+    service_time = ionic_read();
+    sent_time = ionic_read();
+    class_meta = ionic_read();
 
-    //for (int i = 0; i < HEADER_WORDS; i++) headers[i] = lnic_read();
-    headers[0] = lnic_read();
+    //for (int i = 0; i < HEADER_WORDS; i++) headers[i] = ionic_read();
+    headers[0] = ionic_read();
 #if HEADER_WORDS > 1
-    headers[1] = lnic_read();
+    headers[1] = ionic_read();
 #endif
 #if HEADER_WORDS > 2
-    headers[2] = lnic_read();
+    headers[2] = ionic_read();
 #endif
 #if HEADER_WORDS > 3
 #error "Add more unrolled iterations for both lread() and lwrite()"
@@ -111,19 +111,19 @@ int nuevomatch_server(int cid, int context_id) {
     uint32_t trace_idx = class_meta >> 32;
     class_meta = ((uint64_t)trace_idx << 32) | ((uint32_t)action);
 
-    lnic_write_r((app_hdr & (IP_MASK | CONTEXT_MASK)) | (8 + 8 + 8 + (HEADER_WORDS * 8)));
-    lnic_write_r(service_time);
-    lnic_write_r(sent_time);
-    lnic_write_r(class_meta);
-    //for (int i = 0; i < HEADER_WORDS; i++) lnic_write_r(headers[i]);
-    lnic_write_r(headers[0]);
+    ionic_write_r((app_hdr & (IP_MASK | CONTEXT_MASK)) | (8 + 8 + 8 + (HEADER_WORDS * 8)));
+    ionic_write_r(service_time);
+    ionic_write_r(sent_time);
+    ionic_write_r(class_meta);
+    //for (int i = 0; i < HEADER_WORDS; i++) ionic_write_r(headers[i]);
+    ionic_write_r(headers[0]);
 #if HEADER_WORDS > 1
-    lnic_write_r(headers[1]);
+    ionic_write_r(headers[1]);
 #endif
 #if HEADER_WORDS > 2
-    lnic_write_r(headers[2]);
+    ionic_write_r(headers[2]);
 #endif
-    lnic_msg_done();
+    ionic_msg_done();
 	}
 
  	delete classifier;
@@ -136,7 +136,7 @@ int core_main(int argc, char** argv, int cid, int nc) {
 
   uint64_t context_id = 0;
   uint64_t priority = 0;
-  lnic_add_context(context_id, priority);
+  ionic_add_context(context_id, priority);
 
   if (cid > 0) {
     send_startup_msg(cid, context_id);
